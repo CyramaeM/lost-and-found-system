@@ -232,9 +232,9 @@ def Displayform():
                 describe = entry_description.get("1.0", "end-1c")
                 locate = location_text.get()
 
-                '''if first_name == "" or last_name == "" or gender == "" or contact == "" or address == "" or date == "" or describe == "":
+                if first_name == "" or last_name == "" or gender == "" or contact == "" or address == "" or date == "" or describe == "":
                     messagebox.showinfo("Warning", "Fill the Empty field!", icon="warning")
-                    return'''
+                    return
 
                 try:
                     db = mysql.connect(
