@@ -15,45 +15,52 @@ def database():
     )
     cursor = db.cursor()
 
-    create_query_reporter = """CREATE TABLE IF NOT EXISTS reporter(
-        reporter_id INT AUTO_INCREMENT PRIMARY KEY,
+    
+    create_query_person = """CREATE TABLE IF NOT EXISTS person (
+        person_id INT PRIMARY KEY AUTO_INCREMENT,
         fname VARCHAR(255),
         lname VARCHAR(255),
         contact VARCHAR(25),
         address VARCHAR(255),
-        gender VARCHAR(1)
+        gender VARCHAR(1),
+        role VARCHAR(25)
+    )"""
+
+    cursor.execute(create_query_person)
+
+    create_query_lost_items = """CREATE TABLE IF NOT EXISTS lost_items(
+        item_id INT AUTO_INCREMENT PRIMARY KEY,
+        description VARCHAR(255),
+        rep_time TIME,
+        claim_time TIME,
+        location VARCHAR(255),
+        person_id INT,
+        FOREIGN KEY(person_id) REFERENCES person(person_id) ON DELETE CASCADE
+    )"""
+
+    cursor.execute(create_query_lost_items)
+
+    
+    create_query_reporter = """CREATE TABLE IF NOT EXISTS reporter(
+        person_id INT,
+        item_id INT,
+        FOREIGN KEY(item_id) REFERENCES lost_items(item_id) ON DELETE CASCADE,
+        FOREIGN KEY(person_id) REFERENCES person(person_id) ON DELETE CASCADE,
+        report_date DATE
     )"""
 
     cursor.execute(create_query_reporter)
 
     create_query_claimant = """CREATE TABLE IF NOT EXISTS claimant (
-        claimant_id INT AUTO_INCREMENT PRIMARY KEY,
-        fname VARCHAR(255),
-        lname VARCHAR(255),
-        contact VARCHAR(25),
-        address VARCHAR(255),
-        gender VARCHAR(1)
+        person_id INT,
+        item_id INT,
+        FOREIGN KEY(item_id) REFERENCES lost_items(item_id) ON DELETE CASCADE,
+        FOREIGN KEY(person_id) REFERENCES person(person_id) ON DELETE CASCADE,
+        claim_date DATE
     )"""
 
     cursor.execute(create_query_claimant)
-
-    create_query_lost_items = """CREATE TABLE IF NOT EXISTS lost_items(
-    item_id INT AUTO_INCREMENT PRIMARY KEY,
-    reporter_id INT,
-    claimant_id INT,
-    FOREIGN KEY(reporter_id) REFERENCES reporter(reporter_id),
-    FOREIGN KEY(claimant_id) REFERENCES claimant(claimant_id),
-    role VARCHAR(25),
-    report_date DATE,
-    claim_date DATE,
-    description VARCHAR(255),
-    rep_time TIME,
-    claim_time TIME,
-    location VARCHAR(255)
-    )"""
-
-
-    cursor.execute(create_query_lost_items)
+    
 
 
 def Delete():
@@ -85,7 +92,8 @@ def Search():
             parsed_date = datetime.strptime(search_text.get(), '%d-%m-%Y')
             formatted_date = parsed_date.strftime('%Y-%m-%d')  # Convert to 'YYYY-MM-DD' format
 
-            cursor.execute("SELECT lost_items.item_id, lost_items.report_date,lost_items.rep_time,lost_items.claim_date,lost_items.claim_time, lost_items.description,lost_items.location, reporter.reporter_id, claimant.claimant_id FROM lost_items LEFT JOIN claimant ON lost_items.claimant_id = claimant.claimant_id LEFT JOIN reporter ON lost_items.reporter_id = reporter.reporter_id WHERE report_date = %s", (formatted_date,))
+
+            cursor.execute("SELECT DISTINCT lost_items.item_id, reporter.report_date, lost_items.rep_time, claimant.claim_date, lost_items.claim_time, lost_items.description, lost_items.location FROM lost_items LEFT JOIN claimant ON lost_items.item_id = claimant.item_id LEFT JOIN reporter ON lost_items.person_id = reporter.person_id LEFT JOIN person ON claimant.person_id = person.person_id OR reporter.person_id = person.person_id WHERE report_date=%s",(formatted_date,))
             fetch = cursor.fetchall()
             for data in fetch:
                 item_id = data[0]
@@ -95,12 +103,11 @@ def Search():
                 claim_time = data[4]
                 description = data[5]
                 location = data[6]
-                reporter_id = data[7]
-                claimant_id = data[8]
+
+                status = "Claimed" if claim_date is not None else "Not Claimed"
                 
-                status = "Claimed" if claimant_id is not None else "Not Claimed"
-        
-                tree.insert("", "end", values=(item_id, report_date,report_time,claim_date,claim_time, description,location, reporter_id, claimant_id, status))
+                tree.insert("", "end", values=(item_id, description, report_date, report_time, claim_date, claim_time, location, status))
+                
             cursor.close()
             db.close()
         except ValueError:
@@ -108,7 +115,7 @@ def Search():
 def DisplayData():
     database()
     tree.delete(*tree.get_children())
-    cursor.execute("SELECT lost_items.item_id, lost_items.report_date,lost_items.rep_time,lost_items.claim_date,lost_items.claim_time, lost_items.description,lost_items.location, reporter.reporter_id, claimant.claimant_id FROM lost_items LEFT JOIN claimant ON lost_items.claimant_id = claimant.claimant_id LEFT JOIN reporter ON lost_items.reporter_id = reporter.reporter_id ORDER BY report_date")
+    cursor.execute("SELECT DISTINCT lost_items.item_id, reporter.report_date, lost_items.rep_time, claimant.claim_date, lost_items.claim_time, lost_items.description, lost_items.location FROM lost_items LEFT JOIN claimant ON lost_items.item_id = claimant.item_id LEFT JOIN reporter ON lost_items.person_id = reporter.person_id LEFT JOIN person ON claimant.person_id = person.person_id OR reporter.person_id = person.person_id ORDER BY report_date")
     fetch = cursor.fetchall()
     for data in fetch:
         item_id = data[0]
@@ -118,21 +125,20 @@ def DisplayData():
         claim_time = data[4]
         description = data[5]
         location = data[6]
-        reporter_id = data[7]
-        claimant_id = data[8]
+
+        status = "Claimed" if claim_date is not None else "Not Claimed"
         
-        status = "Claimed" if claimant_id is not None else "Not Claimed"
-        
-        tree.insert("", "end", values=(item_id, report_date,report_time,claim_date,claim_time, description,location, reporter_id, claimant_id, status))
+        tree.insert("", "end", values=(item_id, description, report_date, report_time, claim_date, claim_time, location, status))
         
     cursor.close()
     db.close()
+
 
 def sort(): 
     database()
     if sort_text.get() == "Date":
         tree.delete(*tree.get_children())
-        cursor.execute("SELECT lost_items.item_id, lost_items.report_date,lost_items.rep_time,lost_items.claim_date,lost_items.claim_time, lost_items.description,lost_items.location, reporter.reporter_id, claimant.claimant_id FROM lost_items LEFT JOIN claimant ON lost_items.claimant_id = claimant.claimant_id LEFT JOIN reporter ON lost_items.reporter_id = reporter.reporter_id ORDER BY report_date")
+        cursor.execute("SELECT DISTINCT lost_items.item_id, reporter.report_date, lost_items.rep_time, claimant.claim_date, lost_items.claim_time, lost_items.description, lost_items.location FROM lost_items LEFT JOIN claimant ON lost_items.item_id = claimant.item_id LEFT JOIN reporter ON lost_items.person_id = reporter.person_id LEFT JOIN person ON claimant.person_id = person.person_id OR reporter.person_id = person.person_id ORDER BY report_date")
         fetch = cursor.fetchall()
         for data in fetch:
             item_id = data[0]
@@ -142,20 +148,15 @@ def sort():
             claim_time = data[4]
             description = data[5]
             location = data[6]
-            reporter_id = data[7]
-            claimant_id = data[8]
             
-            status = "Claimed" if claimant_id is not None else "Not Claimed"
+            status = "Claimed" if claim_date is not None else "Not Claimed"
             
-            tree.insert("", "end", values=(item_id, report_date,report_time,claim_date,claim_time, description,location, reporter_id, claimant_id, status))
-            
+            tree.insert("", "end", values=(item_id, description, report_date, report_time, claim_date, claim_time, location, status))
         cursor.close()
         db.close()
-
- 
     elif sort_text.get() == "Claimed":
         tree.delete(*tree.get_children())
-        cursor.execute("SELECT lost_items.item_id, lost_items.report_date,lost_items.rep_time, lost_items.claim_date,lost_items.claim_time, lost_items.description,lost_items.location, reporter.reporter_id, claimant.claimant_id FROM lost_items LEFT JOIN claimant ON lost_items.claimant_id = claimant.claimant_id LEFT JOIN reporter ON lost_items.reporter_id = reporter.reporter_id WHERE claimant.claimant_id IS NOT NULL ORDER BY claim_date")
+        cursor.execute("SELECT lost_items.item_id, reporter.report_date, lost_items.rep_time, claimant.claim_date, lost_items.claim_time, lost_items.description, lost_items.location FROM lost_items LEFT JOIN claimant ON lost_items.item_id = claimant.item_id LEFT JOIN reporter ON lost_items.person_id = reporter.person_id WHERE claimant.claim_date IS NOT NULL ORDER BY claimant.claim_date")
         fetch = cursor.fetchall()
         for data in fetch:
             item_id = data[0]
@@ -165,19 +166,16 @@ def sort():
             claim_time = data[4]
             description = data[5]
             location = data[6]
-            reporter_id = data[7]
-            claimant_id = data[8]
-                
+            
             status = "Claimed"
             
-            tree.insert("", "end", values=(item_id, report_date,report_time,claim_date,claim_time, description,location, reporter_id, claimant_id, status))
-            
+            tree.insert("", "end", values=(item_id, description, report_date, report_time, claim_date, claim_time, location, status))
         cursor.close()
         db.close()
 
     elif sort_text.get() == "Not Claimed":
         tree.delete(*tree.get_children())
-        cursor.execute("SELECT lost_items.item_id, lost_items.report_date,lost_items.rep_time, lost_items.claim_date,lost_items.claim_time, lost_items.description,lost_items.location, reporter.reporter_id, claimant.claimant_id FROM lost_items LEFT JOIN claimant ON lost_items.claimant_id = claimant.claimant_id LEFT JOIN reporter ON lost_items.reporter_id = reporter.reporter_id WHERE claimant.claimant_id IS NULL ORDER BY report_date")
+        cursor.execute("SELECT lost_items.item_id, reporter.report_date, lost_items.rep_time, claimant.claim_date, lost_items.claim_time, lost_items.description, lost_items.location FROM lost_items LEFT JOIN claimant ON lost_items.item_id = claimant.item_id LEFT JOIN reporter ON lost_items.person_id = reporter.person_id LEFT JOIN person ON reporter.person_id = person.person_id WHERE claimant.claim_date IS NULL ORDER BY report_date")
         fetch = cursor.fetchall()
         for data in fetch:
             item_id = data[0]
@@ -187,15 +185,14 @@ def sort():
             claim_time = data[4]
             description = data[5]
             location = data[6]
-            reporter_id = data[7]
-            claimant_id = data[8]
             
             status = "Not Claimed"
             
-            tree.insert("", "end", values=(item_id, report_date,report_time,claim_date,claim_time, description,location, reporter_id, claimant_id, status))
-            
+            tree.insert("", "end", values=(item_id, description, report_date, report_time, claim_date, claim_time, location, status))
+        
         cursor.close()
         db.close()
+
 
 
 def Displayform():
@@ -246,6 +243,7 @@ def Displayform():
                     cursor = db.cursor()
 
                     try:
+                        tree.delete(*tree.get_children())
                         # Try to parse the date in the given format 'dd-mm-yyyy'
                         parsed_date = datetime.strptime(date, '%d-%m-%Y')
                         formatted_date = parsed_date.strftime('%Y-%m-%d')  # Convert to 'YYYY-MM-DD' format
@@ -255,15 +253,22 @@ def Displayform():
                             return
 
                     # Insert into reporter table
-                    sql = ("INSERT INTO reporter (fname, lname, gender, contact, address) VALUES (%s, %s, %s, %s, %s)")
-                    val = (first_name, last_name, gender, contact, address)
+                    sql = ("INSERT INTO person(fname, lname, gender, contact, address,role) VALUES (%s, %s, %s, %s, %s,%s)")
+                    val = (first_name, last_name, gender, contact, address,"Reporter")
                     cursor.execute(sql, val)
-                    reporter_id = cursor.lastrowid
+                    person_id = cursor.lastrowid
 
                     # Insert into lost_items table
-                    sql1 = ("INSERT INTO lost_items (reporter_id, role, report_date, description,location,rep_time) VALUES (%s, %s, %s, %s,%s,%s)")
-                    val2 = (reporter_id, "reporter", formatted_date, describe,locate,now)
+                    sql1 = ("INSERT INTO lost_items (person_id,description,location,rep_time) VALUES (%s, %s, %s, %s)")
+                    val2 = (person_id,describe,locate,now)
                     cursor.execute(sql1, val2)
+                    item_id = cursor.lastrowid
+
+                    insert_query_reporter = (
+                        "INSERT INTO reporter(person_id, Item_id, report_date) VALUES (%s, %s, %s)"
+                    )
+                    data_reporter = (person_id, item_id,formatted_date)
+                    cursor.execute(insert_query_reporter, data_reporter)
 
                     db.commit()
                     messagebox.showinfo("Message", "Stored Successfully")
@@ -358,20 +363,28 @@ def Displayform():
 
                 def update1():
                     database()
-                    d1 = first_Name_text.get()
-                    d2 = last_Name_text.get()
-                    d3 = Gender_text.get()
-                    d4 = contact_number_text.get()
-                    d5 = address_text.get()
-                    d6 = date_text.get()
+                    d1 = entry_first_name.get()
+                    d2 = entry_last_name.get()
+                    d3 = entry_gender.get()
+                    d4 = entry_contact_number.get()
+                    d5 = entry_address.get()
+                    d6 = entry_date.get()
 
-                    selected = tree.selection()  # Get the selected item
+                    selected = tree.selection()
 
                     if not selected:
                         messagebox.showwarning("Warning", "Select an item to update", icon="warning")
                         return
 
-                    item_id = tree.set(selected, "#1")  # Get the item_id from the selected item
+                    item_id = tree.set(selected, "#1")
+
+                    try:
+                        parsed_date = datetime.strptime(d6, '%d-%m-%Y')
+                        formatted_date = parsed_date.strftime('%Y-%m-%d')
+                        now = datetime.now()
+                    except ValueError:
+                        messagebox.showinfo("Warning", "Invalid date format. Use 'dd-mm-yyyy' format.", icon="warning")
+                        return
 
                     db = mysql.connect(
                         host="localhost",
@@ -382,34 +395,42 @@ def Displayform():
                     cursor = db.cursor()
 
                     try:
-                        # Try to parse the date in the given format 'dd-mm-yyyy'
-                        parsed_date = datetime.strptime(d6, '%d-%m-%Y')
-                        formatted_date = parsed_date.strftime('%Y-%m-%d')  # Convert to 'YYYY-MM-DD' format
-                        now = datetime.now()
-                    except ValueError:
-                            messagebox.showinfo("Warning", "Invalid date format. Use 'dd-mm-yyyy' format.", icon="warning")
-                            return
+                        tree.delete(*tree.get_children())
+                        # Update claimant table
+                        cursor.execute(
+                            "INSERT INTO person (fname, lname, gender, contact, address, role) "
+                            "VALUES (%s, %s, %s, %s, %s, %s) "
+                            "ON DUPLICATE KEY UPDATE fname=VALUES(fname), lname=VALUES(lname), "
+                            "gender=VALUES(gender), contact=VALUES(contact), address=VALUES(address)",
+                            (d1, d2, d3, d4, d5, "claimant")
+                        )
 
-                    # Update claimant table
-                    cursor.execute(
-                        "INSERT INTO claimant (fname, lname, gender, contact, address) VALUES (%s, %s, %s, %s, %s) "
-                        "ON DUPLICATE KEY UPDATE fname=VALUES(fname), lname=VALUES(lname), gender=VALUES(gender), "
-                        "contact=VALUES(contact), address=VALUES(address)",
-                        (d1, d2, d3, d4, d5)
-                    )
-                    claimant_id = cursor.lastrowid
+                        person_id = cursor.lastrowid
 
-                    # Update lost_items table
-                    cursor.execute(
-                        "UPDATE lost_items SET claimant_id=%s, role=%s, claim_date=%s,claim_time=%s WHERE item_id=%s",
-                        (claimant_id, "claimant", formatted_date,now, item_id)
-                    )
+                        # Update lost_items table
+                        cursor.execute(
+                            "UPDATE lost_items SET claim_time=%s WHERE item_id=%s",
+                            (now, item_id)
+                        )
 
-                    db.commit()
-                    cursor.close()
-                    DisplayData()
-                    db.close()
+                        # Update claimant table
+                        cursor.execute(
+                            "INSERT INTO claimant(person_id, item_id, claim_date) VALUES (%s, %s, %s) "
+                            "ON DUPLICATE KEY UPDATE claim_date=VALUES(claim_date)",
+                            (person_id, item_id, formatted_date)
+                        )
 
+                        db.commit()
+                        messagebox.showinfo("Success", "Data updated successfully", icon="info")
+                    except mysql.Error as e:
+                        db.rollback()
+                        messagebox.showerror("Error", f"Error updating data: {e}", icon="error")
+                    finally:
+                        cursor.close()
+                        DisplayData()
+                        db.close()
+
+                    
                     entry_search.delete(0, END)
                     entry_first_name.delete(0, END)
                     entry_last_name.delete(0, END)
@@ -482,17 +503,19 @@ def Displayform():
                 database="app"
             )
             cursor = db.cursor()
-            cursor.execute("SELECT reporter.*,lost_items.item_id FROM reporter INNER JOIN lost_items ON lost_items.reporter_id = reporter.reporter_id")
+            cursor.execute("SELECT person.*, lost_items.item_id FROM lost_items INNER JOIN reporter ON lost_items.person_id = reporter.person_id INNER JOIN person ON reporter.person_id = person.person_id")
             fetch = cursor.fetchall()
             for data in fetch:
-                reporter_id = data[0]
+                person_id = data[0]
                 reporter_fname = data[1]
                 reporter_lname = data[2]
-                reporter_gender = data[5]
                 reporter_contact = data[3]
                 reporter_address = data[4]
-                item_id = data[6]
-                tree2.insert('', 'end', values=(reporter_id,reporter_fname, reporter_lname, reporter_gender, reporter_contact, reporter_address,item_id,"Reporter" ))
+                reporter_gender = data[5]
+                item_id = data[7]
+                role = data[6]
+                
+                tree2.insert('', 'end', values=(person_id, reporter_fname, reporter_lname, reporter_gender, reporter_contact, reporter_address, item_id, role))
             db.commit()
             db.close()
 
@@ -506,17 +529,19 @@ def Displayform():
                 database="app"
             )
             cursor = db.cursor()
-            cursor.execute("SELECT claimant.*,lost_items.item_id FROM claimant INNER JOIN lost_items ON lost_items.claimant_id = claimant.claimant_id")
+            cursor.execute("SELECT person.*, lost_items.item_id FROM lost_items INNER JOIN claimant ON lost_items.item_id = claimant.item_id INNER JOIN person ON claimant.person_id = person.person_id")
             fetch = cursor.fetchall()
             for data in fetch:
-                claimant_id = data[0]
+                person_id = data[0]
                 claimant_fname = data[1]
                 claimant_lname = data[2]
-                claimant_gender = data[5]
                 claimant_contact = data[3]
                 claimant_address = data[4]
-                item_id = data[6]
-                tree2.insert('', 'end', values=(claimant_id, claimant_fname, claimant_lname, claimant_gender, claimant_contact, claimant_address, item_id,"Claimant"))
+                claimant_gender = data[5]
+                item_id = data[7]
+                role = data[6]
+                
+                tree2.insert('', 'end', values=(person_id, claimant_fname, claimant_lname, claimant_gender, claimant_contact, claimant_address, item_id, role))
             db.commit()
             db.close()
 
@@ -565,7 +590,7 @@ def Displayform():
 
     #----------------------------------------------------
     window= Tk()
-    window.geometry("1200x430")
+    window.geometry("1000x430")
     window.title("Lost and Found System")
     global tree
     global first_Name_text,Gender_text,last_Name_text,date_text,description_text,contact_number_text,address_text,search_text,sort_text
@@ -644,32 +669,28 @@ def Displayform():
     tree = ttk.Treeview(window,selectmode='browse')
     tree.place(x=10,y=170)
     vsb= ttk.Scrollbar(window, orient ="vertical",command=tree.yview)
-    vsb.place(x=1150,y=170,height=225)
+    vsb.place(x=915,y=170,height=225)
     tree.configure(yscrollcommand=vsb.set)
-    tree["columns"]=("1","2","3","4","5","6","7","8","9","10")
+    tree["columns"]=("1","2","3","4","5","6","7","8")
 
     tree["show"]="headings"
-    tree.column("1",width =110,anchor='c') 
-    tree.column("2",width =130,anchor='c') 
-    tree.column("3",width =130,anchor='c') 
+    tree.column("1",width =100,anchor='c') 
+    tree.column("2",width =100,anchor='c') 
+    tree.column("3",width =100,anchor='c') 
     tree.column("4",width =160,anchor='c')
     tree.column("5",width =100,anchor='c') 
-    tree.column("6",width =100,anchor='c') 
+    tree.column("6",width =150,anchor='c') 
     tree.column("7",width =100,anchor='c') 
     tree.column("8",width =100,anchor='c')
-    tree.column("9",width =100,anchor='c')
-    tree.column("10",width =100,anchor='c')
 
     tree.heading("1",text="ID")
-    tree.heading("2",text="Report date")
-    tree.heading("3",text="Report Time")
-    tree.heading("4",text="Claim date")
-    tree.heading("5",text="Claim Time")
-    tree.heading("6",text="Description")
+    tree.heading("2",text="Description")
+    tree.heading("3",text="Report date")
+    tree.heading("4",text="Report Time")
+    tree.heading("5",text="Claim date")
+    tree.heading("6",text="Claim Time")
     tree.heading("7",text="Location")
-    tree.heading("8",text="Reporter ID")
-    tree.heading("9",text="Claimant ID")
-    tree.heading("10",text="Status")
+    tree.heading("8",text="Status")
 
     DisplayData()
 
